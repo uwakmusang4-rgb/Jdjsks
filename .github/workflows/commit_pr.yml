@@ -1,0 +1,74 @@
+name: Daily Commits and Pull Request
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Tahun commit (contoh: 2025)"
+        required: true
+        default: "2025"
+      total_commits:
+        description: "Jumlah commit yang ingin dibuat"
+        required: true
+        default: "50"
+
+jobs:
+  commit_and_pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Git
+      run: |
+        git config user.name "RixzBot"
+        git config user.email "noreply@rixzbot.com"
+
+    - name: Generate Commits
+      run: |
+        YEAR=${{ github.event.inputs.year }}
+        TOTAL=${{ github.event.inputs.total_commits }}
+        echo "Membuat $TOTAL commit untuk tahun $YEAR"
+
+        mkdir -p updates
+        for i in $(seq 1 $TOTAL); do
+          FILE="updates/note_${i}.txt"
+          echo "Commit ke-$i dibuat pada tahun $YEAR" > "$FILE"
+          git add "$FILE"
+
+          # Buat tanggal acak di tahun tersebut
+          MONTH=$(shuf -i 1-12 -n 1)
+          DAY=$(shuf -i 1-28 -n 1)
+          HOUR=$(shuf -i 0-23 -n 1)
+          MINUTE=$(shuf -i 0-59 -n 1)
+          DATE_STR=$(printf "%04d-%02d-%02dT%02d:%02d:00" $YEAR $MONTH $DAY $HOUR $MINUTE)
+
+          GIT_AUTHOR_DATE="$DATE_STR" \
+          GIT_COMMITTER_DATE="$DATE_STR" \
+          git commit -m "Update ke-$i (${YEAR})" || echo "⚠️ Tidak ada perubahan"
+        done
+
+        # Nama branch acak tanpa kata auto
+        BRANCH="update-${YEAR}-$(date +%s)"
+        git push origin HEAD:$BRANCH
+        echo "branch_name=$BRANCH" >> $GITHUB_ENV
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Update batch for ${{ github.event.inputs.year }}"
+        branch: ${{ env.branch_name }}
+        title: "Pull Request - ${{ github.event.inputs.year }}"
+        body: |
+          ### Ringkasan
+          - Tahun: **${{ github.event.inputs.year }}**
+          - Jumlah commit: **${{ github.event.inputs.total_commits }}**
+          - Branch: `${{ env.branch_name }}`
+          
+          PR ini dibuat secara otomatis untuk memperbarui konten pada tahun tersebut.
+        base: main
